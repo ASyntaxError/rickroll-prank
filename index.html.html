@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Important Notice</title>
+<style>
+  :root { --bar-h:96px; --accent:#ff3b30; }
+  html,body{height:100%;margin:0;background:#000;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial;overflow:hidden;}
+  /* hide cursor while prank is active */
+  body.prank-active { cursor:none; }
+
+  /* top banner */
+  .top-banner{position:fixed;top:0;left:0;right:0;padding:14px 12px;text-align:center;z-index:15000;pointer-events:none}
+  .top-title{font-weight:700;font-size:20px}
+  .top-sub{font-size:12px;opacity:0.85}
+
+  /* video stage (leaves room for bottom lock bar) */
+  #stage{position:fixed;top:0;left:0;right:0;bottom:var(--bar-h);background:#000;z-index:1;display:flex;align-items:center;justify-content:center}
+  #player{width:100%;height:100%}
+
+  /* bottom lock bar */
+  #lockbar{position:fixed;left:0;right:0;bottom:0;height:var(--bar-h);background:linear-gradient(180deg, rgba(0,0,0,0.92), rgba(8,8,8,0.98));z-index:14000;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,0.04)}
+  #lock-inner{max-width:980px;width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .lock-left{min-width:220px}
+  .lock-left .title{font-weight:700;font-size:18px}
+  .lock-left .sub{font-size:13px;opacity:0.9}
+  .lock-right{display:flex;align-items:center;gap:10px}
+  input[type="password"]{font-size:16px;padding:10px 12px;border-radius:8px;border:2px solid #222;background:#0b0b0b;color:#fff;width:220px;outline:none}
+  button{font-size:16px;padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+  .hint{font-size:13px;opacity:0.85;min-width:180px;text-align:center}
+
+  /* tap-to-start overlay (for mobile / blocked autoplay) */
+  #startOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:16000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px}
+  #startOverlay h1{font-size:22px;margin:0}
+  #startOverlay p{font-size:15px;margin:0;opacity:0.9}
+  #startOverlay button{font-size:18px;padding:12px 20px;border-radius:10px}
+
+  @media (max-width:640px){
+    :root{--bar-h:140px}
+    .top-title{font-size:18px}
+    input[type="password"]{width:200px}
+    #lock-inner{flex-direction:column;align-items:center}
+  }
+</style>
+</head>
+<body class="prank-active">
+
+  <!-- Top banner (harmless message) -->
+  <div class="top-banner" aria-hidden="false">
+    <div class="top-title">Randon — attention required</div>
+    <div class="top-sub">Be nice to others or you'll get a non-stop rickroll! :)</div>
+  </div>
+
+  <!-- Video stage -->
+  <div id="stage">
+    <div id="player"></div> <!-- YT player will render here -->
+  </div>
+
+  <!-- Bottom lock bar -->
+  <div id="lockbar" role="region" aria-label="Locked">
+    <div id="lock-inner">
+      <div class="lock-left">
+        <div class="title">Locked — enter the password to unlock</div>
+        <div class="sub">This video will keep playing until the correct password is entered.</div>
+      </div>
+
+      <div class="lock-right">
+        <input id="pw" type="password" placeholder="Enter password" autocomplete="off" />
+        <button id="unlock">Unlock</button>
+        <div class="hint" id="hint">Hint: Try asking nicely 😉</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tap-to-start overlay: visible on devices that block autoplay/unmute -->
+  <div id="startOverlay" style="display:none;">
+    <h1>⚠️ Your device needs a tap to start</h1>
+    <p>Tap below to start the fix (this enables fullscreen & sound).</p>
+    <button id="startBtn">Tap to Start</button>
+  </div>
+
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+  /***** Configuration *****/
+  const PASSWORD = "Bully";
+  const VIDEOS = ["dQw4w9WgXcQ","tVj0ZTS4WF4","oavMtUWDBTM","ZZ5LpwO-An4"];
+  /*************************/
+
+  // Utility
+  const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+
+  // Back navigation prevention (best-effort)
+  function pushStateSafe(){ try{ history.pushState({prank:1},"", location.href); }catch(e){} }
+  function flashHint(msg, ms=3000){
+    const h = document.getElementById('hint');
+    if(!h) return;
+    const prev = h.textContent;
+    h.textContent = msg;
+    setTimeout(()=>{ h.textContent = prev; }, ms);
+  }
+  pushStateSafe();
+  window.addEventListener('popstate', function(e){
+    flashHint("Nope — you can't go back. Enter the password to stop it.");
+    pushStateSafe();
+  });
+
+  // YouTube player
+  let player, selected = VIDEOS[Math.floor(Math.random()*VIDEOS.length)], playerReady=false;
+  function onYouTubeIframeAPIReady(){
+    player = new YT.Player('player', {
+      videoId: selected,
+      playerVars: {
+        autoplay: 1, controls: 0, loop: 1, playlist: selected,
+        modestbranding: 1, rel: 0, playsinline: 1, disablekb: 1
+      },
+      events: {
+        onReady: (e) => onPlayerReady(e),
+        onStateChange: (e) => onPlayerStateChange(e)
+      }
+    });
+  }
+
+  // Called when player ready
+  function onPlayerReady(e){
+    playerReady = true;
+
+    // best-effort: try to autoplay muted immediately (many browsers allow muted autoplay)
+    try {
+      e.target.mute();
+      e.target.playVideo();
+    } catch(err){}
+
+    // After small delay, try to unmute & set volume (may be blocked until user gesture)
+    setTimeout(()=>{ try{ e.target.unMute(); e.target.setVolume(100); }catch(e){} }, 400);
+    setTimeout(()=>{ try{ e.target.unMute(); e.target.setVolume(100); }catch(e){} }, 1400);
+
+    // If device likely requires gesture (mobile/touch), show start overlay for a tap
+    // or if after some time video is not audible, show overlay.
+    setTimeout(()=> {
+      const show = isTouch || !isProbablyPlayingWithSound();
+      if(show) showStartOverlay();
+    }, 800);
+  }
+
+  // If player pauses/stops, try to keep it playing
+  function onPlayerStateChange(e){
+    if(e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED){
+      try{ player.playVideo(); }catch(e){}
+    }
+  }
+
+  // Heuristic: determine if the player is likely playing with sound
+  function isProbablyPlayingWithSound(){
+    try {
+      // we can't access internal <video> in cross-origin iframe reliably; check player.getPlayerState
+      if(!playerReady) return false;
+      const state = player.getPlayerState();
+      // if playing, assume it's working; if unstarted or buffering, treat as not audible
+      return state === YT.PlayerState.PLAYING;
+    } catch(e){ return false; }
+  }
+
+  // Show overlay that asks for user gesture to start (mobile-friendly)
+  function showStartOverlay(){
+    const ov = document.getElementById('startOverlay');
+    ov.style.display = 'flex';
+    // Make sure body still hides cursor while overlay present
+    document.body.classList.add('prank-active');
+    // Also push a gentle hint in the bottom hint area
+    flashHint("Tap 'Start' to enable sound & fullscreen.");
+  }
+
+  // Start button handler (this is a user gesture that allows unmute & fullscreen)
+  document.getElementById('startBtn').addEventListener('click', async () => {
+    const ov = document.getElementById('startOverlay');
+    ov.style.display = 'none';
+    // ensure lock overlay is visible
+    document.getElementById('lockbar').style.display = 'flex';
+    try {
+      if(player && player.playVideo) {
+        // Unmute, max volume and play
+        player.unMute();
+        player.setVolume(100);
+        player.playVideo();
+      }
+    } catch(e){}
+    // Request fullscreen on the iframe/container (some browsers require this to be from gesture)
+    try {
+      const iframe = player && player.getIframe ? player.getIframe() : document.getElementById('player');
+      if(iframe.requestFullscreen) await iframe.requestFullscreen();
+      else if(iframe.webkitRequestFullscreen) await iframe.webkitRequestFullscreen();
+    } catch(e){}
+  });
+
+  // Password/unlock logic
+  const pwInput = document.getElementById('pw');
+  const unlockBtn = document.getElementById('unlock');
+  const lockbar = document.getElementById('lockbar');
+
+  function tryUnlock(){
+    if(pwInput.value === PASSWORD){
+      // Stop video, hide lockbar, restore cursor
+      try { if(player && player.stopVideo) player.stopVideo(); } catch(e){}
+      lockbar.style.display = 'none';
+      document.body.classList.remove('prank-active');
+      flashHint("Unlocked — prank over.");
+      window.onbeforeunload = null;
+      // Allow back-navigation again
+      try { history.back(); } catch(e){}
+    } else {
+      pwInput.animate([{transform:'translateX(0)'},{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'translateX(0)'}], {duration:300});
+      flashHint("Nope — try again.", 1800);
+      pwInput.value = "";
+    }
+  }
+  unlockBtn.addEventListener('click', tryUnlock);
+  pwInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') tryUnlock(); });
+
+  // Progressive hint on clicking the hint
+  let helpCount=0;
+  document.getElementById('hint').addEventListener('click', ()=> {
+    helpCount++;
+    if(helpCount === 1) flashHint("Password starts with a capital B.", 3000);
+    else if(helpCount === 2) flashHint("It's 'Bully'.", 3000);
+  });
+
+  // Warn on close (gives user a chance)
+  window.onbeforeunload = function(e){
+    const msg = "This content is still playing. Are you sure you want to leave?";
+    if (e) e.returnValue = msg;
+    return msg;
+  };
+
+  // If user hides tab then returns, ensure playback tries to resume
+  document.addEventListener('visibilitychange', ()=> {
+    if(document.visibilityState === 'visible') {
+      try { if(player && player.playVideo) player.playVideo(); } catch(e){}
+    }
+  });
+
+  // Ensure the prank-active class hides cursor initially
+  document.body.classList.add('prank-active');
+
+  // Fallback: if the page loads in an environment that allows autoplay with sound immediately,
+  // the start overlay won't be shown. If overlay appears and user doesn't tap, the video may be muted;
+  // that's expected — the start overlay provides the gesture to unmute.
+  </script>
+</body>
+</html>
